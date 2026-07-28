@@ -1,0 +1,46 @@
+P2P SPAWN FIX
+
+P2P Spawn Fix protects Green Hell multiplayer sessions from a repetitive
+ArgumentNullException raised while deserializing an object-spawn message.
+
+The mod works automatically after it is loaded.
+
+COMMAND
+
+p2pfix
+p2pfix status
+
+Shows how many null spawn-data arrays were repaired and how many malformed
+spawn messages had to be discarded by the safety barrier. Version 1.2.1 also
+reports skipped zero-byte initial states and repaired or deferred
+replicated-player subelement resolutions.
+
+INSTALLATION
+
+Install the mod on every computer whose Player.log shows the exception. For
+consistent co-op behavior, using it on the host and all connected players is
+recommended.
+
+P2P Spawn Fix is a permanent mod. GreenHellModLoader loads it by default and
+does not allow it to be unloaded while the game is running. Disable or remove
+it before starting Green Hell if you need to run without the fix.
+
+The main repair is restricted to the time in which
+P2PObjectSpawnMessage.Deserialize is running. It does not change byte arrays
+belonging to other network-message types.
+
+When Replicator.OnSpawnMessage receives a zero-byte payload, the game normally
+calls ReplicationComponent.Deserialize as an initial-state read anyway. The mod
+skips only that impossible read and allows the object-spawn process to finish.
+Later regular replication messages can then provide state.
+
+If an empty initial spawn leaves ReplicatedPlayerSubelements without its
+derived hash or current-state arrays, the mod rebuilds them from the remote
+player model before OnReplicationResolve continues. If the incoming state or
+the player model does not exist yet, that one resolution is deferred.
+
+LOG BEHAVIOR
+
+The mod logs the first three corrections, correction number 10, and then one
+message for every 100 corrections. This prevents the original repetitive error
+from flooding Player.log.
