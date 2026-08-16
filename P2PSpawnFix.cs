@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using System.Threading;
 
@@ -55,6 +56,7 @@ internal static class P2PSpawnFixRuntime
     private static int _emptyInitialStatesSkipped;
     private static int _playerStatesRepaired;
     private static int _playerResolvesDeferred;
+    private static int _invalidPotteryGhostsBlocked;
 
     internal static bool IsInsideSpawnDeserialize
     {
@@ -114,6 +116,25 @@ internal static class P2PSpawnFixRuntime
             "[P2P Spawn Fix] Deferred an incomplete replicated-player resolution.");
     }
 
+    internal static void RecordInvalidPotteryGhost(
+        int requestedIndex,
+        int prefabCount,
+        int currentIndex)
+    {
+        int count = Interlocked.Increment(ref _invalidPotteryGhostsBlocked);
+
+        if (count <= 5 || count == 10 || count % 100 == 0)
+        {
+            Debug.LogWarning(
+                "[P2P Spawn Fix] Blocked invalid PotteryTable ghost update before " +
+                "SetupGhost could remove the current craft object. Requested index: " +
+                requestedIndex +
+                "; prefab count: " + prefabCount +
+                "; current index: " + currentIndex +
+                "; total blocked: " + count + ".");
+        }
+    }
+
     private static void LogRateLimited(int count, string message)
     {
         // The original fault can repeat every frame. Keep the first few events
@@ -137,6 +158,8 @@ internal static class P2PSpawnFixRuntime
             _playerStatesRepaired +
             "; incomplete player resolves deferred: " +
             _playerResolvesDeferred +
+            "; invalid pottery ghost updates blocked: " +
+            _invalidPotteryGhostsBlocked +
             ".";
     }
 
@@ -148,6 +171,7 @@ internal static class P2PSpawnFixRuntime
         Interlocked.Exchange(ref _emptyInitialStatesSkipped, 0);
         Interlocked.Exchange(ref _playerStatesRepaired, 0);
         Interlocked.Exchange(ref _playerResolvesDeferred, 0);
+        Interlocked.Exchange(ref _invalidPotteryGhostsBlocked, 0);
     }
 
     internal static Type FindType(string typeName)
@@ -366,6 +390,90 @@ internal static class P2PSpawnFixRuntime
             type.FullName + "." + fieldName + ".");
 
         return null;
+    }
+}
+
+// A remote PotteryTable can replicate -1 (or another invalid value) to a
+// client. Validate it before SetupGhost changes the currently displayed craft
+// object and then indexes m_GhostPrefabs.
+[HarmonyPatch]
+internal static class PotteryTableSetupGhostGuardPatch
+{
+    private static FieldInfo _ghostPrefabsField;
+    private static FieldInfo _currentGhostIndexField;
+
+    private static MethodBase TargetMethod()
+    {
+        Type potteryType = P2PSpawnFixRuntime.FindType("PotteryTable");
+        if (potteryType == null)
+        {
+            return null;
+        }
+
+        _ghostPrefabsField = AccessTools.Field(potteryType, "m_GhostPrefabs");
+        _currentGhostIndexField =
+            AccessTools.Field(potteryType, "m_CurrentGhostIndex");
+
+        if (_ghostPrefabsField == null)
+        {
+            Debug.LogWarning(
+                "[P2P Spawn Fix] PotteryTable.m_GhostPrefabs was not found. " +
+                "The pottery protection could not be installed safely.");
+            return null;
+        }
+
+        MethodBase setupGhost = P2PSpawnFixRuntime.FindMethod(
+            "PotteryTable",
+            "SetupGhost",
+            typeof(void),
+            1);
+
+        if (setupGhost != null)
+        {
+            Debug.Log(
+                "[P2P Spawn Fix] PotteryTable SetupGhost guard installed.");
+        }
+
+        return setupGhost;
+    }
+
+    private static bool Prefix(object __instance, int __0)
+    {
+        if (__instance == null || _ghostPrefabsField == null)
+        {
+            return true;
+        }
+
+        ICollection ghostPrefabs =
+            _ghostPrefabsField.GetValue(__instance) as ICollection;
+
+        if (ghostPrefabs == null)
+        {
+            return true;
+        }
+
+        int requestedIndex = __0;
+        if (requestedIndex >= 0 && requestedIndex < ghostPrefabs.Count)
+        {
+            return true;
+        }
+
+        int currentIndex = int.MinValue;
+        if (_currentGhostIndexField != null)
+        {
+            object currentValue = _currentGhostIndexField.GetValue(__instance);
+            if (currentValue is int)
+            {
+                currentIndex = (int)currentValue;
+            }
+        }
+
+        P2PSpawnFixRuntime.RecordInvalidPotteryGhost(
+            requestedIndex,
+            ghostPrefabs.Count,
+            currentIndex);
+
+        return false;
     }
 }
 
