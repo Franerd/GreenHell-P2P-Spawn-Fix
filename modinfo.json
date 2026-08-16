@@ -1,8 +1,8 @@
 {
   "name": "P2P Spawn Fix",
   "author": "FraNerd",
-  "description": "Repairs zero-byte object-spawn payloads and incomplete replicated-player state in Green Hell multiplayer.",
-  "version": "1.2.2",
+  "description": "Protects co-op clients from invisible remote players, repetitive inventory-related spawn errors, and invalid Pottery Table ghost updates.",
+  "version": "2.0.0",
   "license": "GNU AGPLv3",
   "icon": "icon.png",
   "banner": "banner.jpg",

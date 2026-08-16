@@ -1,7 +1,12 @@
-P2P SPAWN FIX
+P2P SPAWN FIX 2.0.0
 
-P2P Spawn Fix protects Green Hell multiplayer sessions from a repetitive
-ArgumentNullException raised while deserializing an object-spawn message.
+P2P Spawn Fix protects Green Hell co-op clients from incomplete or invalid
+network state. Confirmed results include restoring invisible remote players,
+stopping repetitive inventory-related object-spawn errors, and keeping the
+Pottery Table functional when invalid ghost updates are received.
+
+The protection is local to the computer where the mod is installed. It does
+not alter the host's save or force other players to use the repaired state.
 
 The mod works automatically after it is loaded.
 
@@ -12,8 +17,16 @@ p2pfix status
 
 Shows how many null spawn-data arrays were repaired and how many malformed
 spawn messages had to be discarded by the safety barrier. Version 1.2.1 also
-reports skipped zero-byte initial states and repaired or deferred
-replicated-player subelement resolutions.
+reports skipped zero-byte initial states, repaired or deferred player state,
+and blocked invalid Pottery Table ghost updates.
+
+CONFIRMED FIXES
+
+- Restores invisible hosts or remote players on the protected client.
+- Stops repetitive P2P spawn exceptions associated with broken inventory and
+  backpack behavior.
+- Blocks invalid PotteryTable SetupGhost indices before the current craft
+  object can disappear or an ArgumentOutOfRangeException can be thrown.
 
 INSTALLATION
 
