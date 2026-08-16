@@ -1,8 +1,8 @@
 {
   "name": "P2P Spawn Fix",
   "author": "FraNerd",
-  "description": "Test build: adds a preventive guard for invalid PotteryTable ghost indices in multiplayer.",
-  "version": "1.2.3",
+  "description": "Protects co-op clients from invisible remote players, repetitive inventory-related spawn errors, and invalid Pottery Table ghost updates.",
+  "version": "2.0.0",
   "license": "GNU AGPLv3",
   "icon": "icon.png",
   "banner": "banner.jpg",
