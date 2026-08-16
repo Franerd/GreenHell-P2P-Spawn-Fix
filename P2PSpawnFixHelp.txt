@@ -1,4 +1,11 @@
-P2P SPAWN FIX
+P2P SPAWN FIX 1.2.3-TEST1
+
+TEST BUILD
+
+Adds a preventive PotteryTable guard that rejects invalid replicated ghost
+indices before SetupGhost can remove the current craft object and throw an
+ArgumentOutOfRangeException. The guard logs the requested index, prefab count,
+and current index for diagnosis.
 
 P2P Spawn Fix protects Green Hell multiplayer sessions from a repetitive
 ArgumentNullException raised while deserializing an object-spawn message.
