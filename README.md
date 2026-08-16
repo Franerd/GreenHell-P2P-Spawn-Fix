@@ -1,24 +1,41 @@
-![P2P Spawn Fix](banner.jpg)
+# P2P Spawn Fix
 
-# P2P Spawn Fix — Beta
+P2P Spawn Fix protects Green Hell co-op clients from incomplete or invalid
+network states that can leave parts of a multiplayer session broken.
 
-P2P Spawn Fix is a targeted multiplayer stability patch for Green Hell.
-
-It repairs a specific replication failure where an object-spawn message arrives with a null or zero-byte payload. Without the patch, this can trigger repeated exceptions in `P2PObjectSpawnMessage.Deserialize`, `ReplicationComponent.Deserialize`, or `ReplicatedPlayerSubelements.OnReplicationResolve`.
+Version 2.0.0 is the first stable release. Testing confirmed that the same P2P
+replication failure can cause invisible remote players, repetitive errors when
+using the backpack or inventory, and a broken Pottery Table on affected
+clients.
 
 ## What it fixes
 
-- Replaces null spawn-data arrays only while a P2P object-spawn message is being deserialized.
-- Skips impossible zero-byte initial replication states before the network reader goes out of range.
-- Rebuilds missing replicated-player subelement state when it can be recovered safely.
-- Uses rate-limited diagnostic messages to avoid flooding the Unity log.
-- Loads automatically with the game as a permanent mod.
+- **Invisible host or remote players:** rebuilds incomplete replicated-player
+  state when a remote model fails to initialize on the client.
+- **Endless backpack or inventory errors:** repairs null object-spawn payloads
+  and skips impossible zero-byte initial replication reads.
+- **Broken Pottery Table:** rejects invalid replicated ghost indices before
+  they can remove the current craft object or throw an
+  `ArgumentOutOfRangeException`.
+- Uses rate-limited diagnostics so recurring network faults do not flood
+  `Player.log`.
+- Loads automatically as a permanent mod.
+
+## Client-side scope
+
+The protection applies to the computer where the mod is installed. It does not
+modify the host's save, repair the Pottery Table globally, or force other
+players to use the protected state.
+
+A host may still see a broken Pottery Table while a client using this mod keeps
+the same table functional. Install the mod on each client affected by invisible
+players, repetitive inventory-related errors, object-spawn exceptions, or
+Pottery Table desynchronization.
 
 ## Installation and use
 
-Install the `.ghmod` normally through the Green Hell ModLoader. The correction is automatic and does not require configuration.
-
-For consistent co-op behavior, install it on the host and on all affected players. In the console, run:
+Install the `.ghmod` normally through Green Hell ModLoader. No configuration is
+required. In the console, run:
 
 ```text
 p2pfix status
@@ -26,20 +43,31 @@ p2pfix status
 
 This displays the number of repaired or blocked network states.
 
-## Beta scope
+## Verified results
 
-This Beta targets the reported P2P spawn/replication stack only. It does not repair unrelated missing-prefab, missing-script, AI-group, or Event System warnings.
+Testing in the same defective co-op session confirmed:
 
-Compatibility is intentionally capped at Green Hell Update 1.5.5 until later game versions are tested.
+- 1,262 repeated network exceptions without the mod and zero after reconnecting
+  with it;
+- an invisible host restored locally;
+- normal backpack and inventory use;
+- multiple Pottery Table crafts completed normally;
+- repeated invalid `SetupGhost(-1)` updates blocked while the last valid craft
+  state remained usable;
+- successful recovery after reconnecting to an already-defective session.
 
-## Version 1.2.2
+## Version 2.0.0
 
-- Corrected null spawn-data handling.
-- Added protection against zero-byte initial replication reads.
-- Added recovery for missing replicated-player subelement state.
-- Added the `p2pfix status` diagnostic command.
-- Marked the mod as permanent so it loads with the game.
-- Added unique icon and banner artwork.
+- Promoted the mod from Beta to Stable.
+- Expanded the documented scope to the three confirmed player-facing fixes.
+- Added client-side Pottery Table protection and diagnostics.
+- Preserved the existing null-payload, zero-byte state, and replicated-player
+  recovery protections.
+
+## Compatibility
+
+Tested with Green Hell Update 1.5.5. The mod does not attempt to repair unrelated
+missing-prefab, missing-script, AI-group, LODGroup, or Event System warnings.
 
 ## License
 
