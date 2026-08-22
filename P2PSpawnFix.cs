@@ -51,9 +51,16 @@ internal static class P2PSpawnFixRuntime
     [ThreadStatic]
     private static int _spawnDeserializeDepth;
 
+    [ThreadStatic]
+    private static int _objectSpawnDepth;
+
+    [ThreadStatic]
+    private static bool _currentSpawnHadNullArrayRepair;
+
     private static int _nullArraysRepaired;
     private static int _invalidSpawnsBlocked;
     private static int _emptyInitialStatesSkipped;
+    private static int _sensitiveInitialStatesPreserved;
     private static int _playerStatesRepaired;
     private static int _playerResolvesDeferred;
     private static int _invalidPotteryGhostsBlocked;
@@ -61,6 +68,39 @@ internal static class P2PSpawnFixRuntime
     internal static bool IsInsideSpawnDeserialize
     {
         get { return _spawnDeserializeDepth > 0; }
+    }
+
+    internal static bool CanSkipCurrentEmptyInitialState
+    {
+        get
+        {
+            return
+                _objectSpawnDepth > 0 &&
+                _currentSpawnHadNullArrayRepair;
+        }
+    }
+
+    internal static void EnterObjectSpawn()
+    {
+        if (_objectSpawnDepth == 0)
+        {
+            _currentSpawnHadNullArrayRepair = false;
+        }
+
+        _objectSpawnDepth++;
+    }
+
+    internal static void ExitObjectSpawn()
+    {
+        if (_objectSpawnDepth > 0)
+        {
+            _objectSpawnDepth--;
+        }
+
+        if (_objectSpawnDepth == 0)
+        {
+            _currentSpawnHadNullArrayRepair = false;
+        }
     }
 
     internal static void EnterSpawnDeserialize()
@@ -78,6 +118,11 @@ internal static class P2PSpawnFixRuntime
 
     internal static void RecordNullArrayRepair()
     {
+        if (_objectSpawnDepth > 0)
+        {
+            _currentSpawnHadNullArrayRepair = true;
+        }
+
         int count = Interlocked.Increment(ref _nullArraysRepaired);
         LogRateLimited(
             count,
@@ -106,6 +151,17 @@ internal static class P2PSpawnFixRuntime
         LogRateLimited(
             count,
             "[P2P Spawn Fix] Skipped an impossible zero-byte initial replication state.");
+    }
+
+    internal static void RecordSensitiveInitialStatePreserved(object instance)
+    {
+        int count = Interlocked.Increment(ref _sensitiveInitialStatesPreserved);
+        string objectName = DescribeReplicationTarget(instance);
+
+        LogRateLimited(
+            count,
+            "[P2P Spawn Fix] Preserved the original initial-state behavior for " +
+            "a progression-sensitive object: " + objectName + ".");
     }
 
     internal static void RecordDeferredPlayerResolve()
@@ -154,6 +210,8 @@ internal static class P2PSpawnFixRuntime
             _invalidSpawnsBlocked +
             "; empty initial states skipped: " +
             _emptyInitialStatesSkipped +
+            "; sensitive initial states preserved: " +
+            _sensitiveInitialStatesPreserved +
             "; player states repaired: " +
             _playerStatesRepaired +
             "; incomplete player resolves deferred: " +
@@ -166,9 +224,12 @@ internal static class P2PSpawnFixRuntime
     internal static void Reset()
     {
         _spawnDeserializeDepth = 0;
+        _objectSpawnDepth = 0;
+        _currentSpawnHadNullArrayRepair = false;
         Interlocked.Exchange(ref _nullArraysRepaired, 0);
         Interlocked.Exchange(ref _invalidSpawnsBlocked, 0);
         Interlocked.Exchange(ref _emptyInitialStatesSkipped, 0);
+        Interlocked.Exchange(ref _sensitiveInitialStatesPreserved, 0);
         Interlocked.Exchange(ref _playerStatesRepaired, 0);
         Interlocked.Exchange(ref _playerResolvesDeferred, 0);
         Interlocked.Exchange(ref _invalidPotteryGhostsBlocked, 0);
@@ -186,6 +247,101 @@ internal static class P2PSpawnFixRuntime
         }
 
         return type;
+    }
+
+    internal static bool IsProgressionSensitiveReplication(object instance)
+    {
+        if (instance == null)
+        {
+            return false;
+        }
+
+        Type instanceType = instance.GetType();
+        if (ContainsProgressionMarker(instanceType.FullName))
+        {
+            return true;
+        }
+
+        Component component = instance as Component;
+        if (component == null)
+        {
+            return false;
+        }
+
+        Transform current = component.transform;
+        while (current != null)
+        {
+            if (ContainsProgressionMarker(current.name))
+            {
+                return true;
+            }
+
+            Component[] attachedComponents =
+                current.gameObject.GetComponents<Component>();
+
+            for (int i = 0; i < attachedComponents.Length; i++)
+            {
+                Component attached = attachedComponents[i];
+                if (attached != null &&
+                    ContainsProgressionMarker(attached.GetType().FullName))
+                {
+                    return true;
+                }
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsProgressionMarker(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        string[] markers =
+        {
+            "map",
+            "quest",
+            "notepad",
+            "notebook",
+            "journal",
+            "blueprint",
+            "recipe",
+            "cartograph"
+        };
+
+        for (int i = 0; i < markers.Length; i++)
+        {
+            if (value.IndexOf(
+                    markers[i],
+                    StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string DescribeReplicationTarget(object instance)
+    {
+        if (instance == null)
+        {
+            return "<null>";
+        }
+
+        Component component = instance as Component;
+        if (component != null)
+        {
+            return component.gameObject.name + " (" +
+                instance.GetType().Name + ")";
+        }
+
+        return instance.GetType().FullName;
     }
 
     internal static MethodBase FindMethod(
@@ -544,8 +700,15 @@ internal static class P2PObjectSpawnSafetyPatch
             1);
     }
 
+    private static void Prefix()
+    {
+        P2PSpawnFixRuntime.EnterObjectSpawn();
+    }
+
     private static Exception Finalizer(Exception __exception)
     {
+        P2PSpawnFixRuntime.ExitObjectSpawn();
+
         if (__exception == null)
         {
             return null;
@@ -565,8 +728,9 @@ internal static class P2PObjectSpawnSafetyPatch
 // ReplicationComponent.Deserialize(payload, true), even when the encoded spawn
 // payload has zero bytes. ReplicationReceive expects a header immediately and
 // its first ReadByte/ReadInt32 operation cannot succeed on that buffer. Skip
-// only this impossible initial read; the object-spawn method can then finish
-// registering the object and later replication messages can provide state.
+// only this impossible initial read when it belongs to the same object-spawn
+// message whose null byte array was repaired. Never change unrelated initial
+// reads or progression-sensitive objects such as maps and quest items.
 [HarmonyPatch]
 internal static class EmptyInitialReplicationStatePatch
 {
@@ -579,13 +743,42 @@ internal static class EmptyInitialReplicationStatePatch
             2);
     }
 
-    private static bool Prefix(ArraySegment<byte> __0, bool __1)
+    private static bool Prefix(object __instance, ArraySegment<byte> __0, bool __1)
     {
         ArraySegment<byte> payload = __0;
         bool initialState = __1;
 
         if (!initialState || payload.Count != 0)
         {
+            return true;
+        }
+
+        if (!P2PSpawnFixRuntime.CanSkipCurrentEmptyInitialState)
+        {
+            return true;
+        }
+
+        bool progressionSensitive;
+
+        try
+        {
+            progressionSensitive =
+                P2PSpawnFixRuntime.IsProgressionSensitiveReplication(__instance);
+        }
+        catch (Exception exception)
+        {
+            // Object hierarchies may disappear while their network message is
+            // being processed. If classification is uncertain, never suppress
+            // the game's original progression or replication behavior.
+            Debug.LogWarning(
+                "[P2P Spawn Fix] Initial-state classification failed; " +
+                "preserving the original game behavior: " + exception.Message);
+            return true;
+        }
+
+        if (progressionSensitive)
+        {
+            P2PSpawnFixRuntime.RecordSensitiveInitialStatePreserved(__instance);
             return true;
         }
 

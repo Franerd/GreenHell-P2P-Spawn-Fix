@@ -3,7 +3,9 @@
 P2P Spawn Fix protects Green Hell co-op clients from incomplete or invalid
 network states that can leave parts of a multiplayer session broken.
 
-Version 2.0.0 is the first stable release. Testing confirmed that the same P2P
+Version 2.0.1 keeps the stable fixes while narrowing the zero-byte guard so it
+cannot suppress map or other progression-sensitive initialization. Testing
+confirmed that the same P2P
 replication failure can cause invisible remote players, repetitive errors when
 using the backpack or inventory, and a broken Pottery Table on affected
 clients.
@@ -13,7 +15,10 @@ clients.
 - **Invisible host or remote players:** rebuilds incomplete replicated-player
   state when a remote model fails to initialize on the client.
 - **Endless backpack or inventory errors:** repairs null object-spawn payloads
-  and skips impossible zero-byte initial replication reads.
+  and skips impossible zero-byte initial replication reads only inside the
+  same malformed object-spawn message.
+- **Map and progression safety:** preserves the game's original handling for
+  maps, quest items, notebooks, journals, recipes, and blueprints.
 - **Broken Pottery Table:** rejects invalid replicated ghost indices before
   they can remove the current craft object or throw an
   `ArgumentOutOfRangeException`.
@@ -55,6 +60,14 @@ Testing in the same defective co-op session confirmed:
 - repeated invalid `SetupGhost(-1)` updates blocked while the last valid craft
   state remained usable;
 - successful recovery after reconnecting to an already-defective session.
+
+## Version 2.0.1
+
+- Narrowed the zero-byte initial-state guard to the malformed object-spawn
+  message currently being repaired.
+- Added fail-safe detection for map and progression-sensitive objects.
+- Added diagnostics for progression-sensitive states preserved by the mod.
+- Retained all fixes delivered in stable version 2.0.0.
 
 ## Version 2.0.0
 
