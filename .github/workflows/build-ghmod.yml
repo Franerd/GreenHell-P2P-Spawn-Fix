@@ -1,0 +1,45 @@
+name: Build distributable GHMod
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'dist/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build GHMod
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          rm -f dist/modinstaller.p2p-spawn-fix.ghmod
+          zip -j -q dist/modinstaller.p2p-spawn-fix.ghmod \
+            P2PSpawnFix.cs \
+            P2PSpawnFixHelp.txt \
+            modinfo.json \
+            icon.png \
+            banner.jpg
+
+      - name: Commit distributable when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/modinstaller.p2p-spawn-fix.ghmod
+          if git diff --cached --quiet; then
+            echo "GHMod already current."
+            exit 0
+          fi
+          git commit -m "build: update distributable ghmod [skip ci]"
+          git push
